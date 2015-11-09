@@ -18,6 +18,7 @@ namespace _3dEngine
         public float ZFar = 10000;
         public float ZNear = 0;
         private Texture2D canvas;
+        float pixelScale = 2;
         public Camera Camera;
         public bool EnableShading = true;
 
@@ -29,7 +30,8 @@ namespace _3dEngine
 
         public void Create()
         {
-            ScreenSize = new Point(graphicsDevice.Viewport.Width, graphicsDevice.Viewport.Height);
+            graphicsDevice.SamplerStates[0] = SamplerState.PointClamp;
+            ScreenSize = new Point((int)(graphicsDevice.Viewport.Width / pixelScale), (int)(graphicsDevice.Viewport.Height / pixelScale));
             screen = new Color[ScreenSize.X, ScreenSize.Y];
             zBuffer = new float[ScreenSize.X, ScreenSize.Y];
             DrawClear(Color.White);
@@ -53,8 +55,10 @@ namespace _3dEngine
                 for (int yp = 0; yp < ScreenSize.Y; yp++)
                     data[yp * ScreenSize.X + xp] = screen[xp, yp];
             canvas.SetData(data);
-            spriteBatch.Begin();
-            spriteBatch.Draw(canvas, Vector2.Zero, Color.White);
+
+            spriteBatch.Begin(SpriteSortMode.Immediate);
+            graphicsDevice.SamplerStates[0] = SamplerState.PointClamp;
+            spriteBatch.Draw(canvas, Vector2.Zero, null, Color.White, 0, Vector2.Zero, pixelScale, SpriteEffects.None, 0 );
             spriteBatch.End();
         }
 

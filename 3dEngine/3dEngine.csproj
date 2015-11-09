@@ -38,6 +38,7 @@
     <ApplicationIcon>Icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Engine\AllAssets - Copy.cs" />
     <Compile Include="Engine\Camera.cs" />
     <Compile Include="Engine\AllAssets.cs" />
     <Compile Include="Engine\DrawWrapper.cs" />

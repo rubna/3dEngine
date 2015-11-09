@@ -46,7 +46,7 @@ namespace _3dEngine
         {
             spriteBatch = new SpriteBatch(graphics.GraphicsDevice);
             drawWrapper = new DrawWrapper(spriteBatch, GraphicsDevice);
-            world.AllAssets.LoadModel("test", Content);
+            world.AllAssets.LoadAllModels();
 
             world.DrawWrapper = drawWrapper;
             drawWrapper.Create();

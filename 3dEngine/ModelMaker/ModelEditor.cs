@@ -10,25 +10,31 @@ namespace _3dEngine
         List<int> selectedVertices = new List<int>();
         bool showMoveTool = true;
         bool drawDebug = true;
+        bool wireframe = false;
         float selectionRadius = 12;
         Vector3 moveConstraint = Vector3.Zero;
         Vector3 moveToolPosition = Vector3.Zero;
         float moveToolSize = 40;
         float paletteSize = 40;
-        int selectedColor = 0;
-        Color[] colors = { new Color(165, 177, 63), Color.Gray, Color.Transparent, Color.Green, new Color(82, 149, 204) };
+        int selectedColorLeft = 0;
+        int selectedColorRight = 0;
+        Color[] colors = { new Color(165, 177, 63), Color.Gray, Color.Transparent, new Color(72, 119, 44), new Color(224, 163, 49), new Color(82, 149, 204) };
 
+        string currentModel = "test";
         string tool = "select";
+
+        List<Mesh> history = new List<Mesh>();
+        int historyIndex = 0;
 
         public ModelEditor()
         {
-            myMesh = new Mesh();
-            myMesh.MakeCube(Color.LightGray, Color.Transparent);
         }
 
         public override void Create()
         {
             base.Create();
+            myMesh = LoadCurrentModel();
+            AddHistoryEntry();
         }
 
         public override void Update(GameTime gameTime)
@@ -44,70 +50,32 @@ namespace _3dEngine
                 showMoveTool = !showMoveTool;
             if (Input.KeyboardCheckPressed(Keys.D))
                 drawDebug = !drawDebug;
+            if (Input.KeyboardCheckPressed(Keys.W))
+                wireframe = !wireframe;
             //if (selectedVertices.Count == 0)
             //showMoveTool = false;
 
-            //toggle shading
+            //undo and redo
+            if (Input.KeyboardCheckDown(Keys.LeftControl))
+            {
+                if (Input.KeyboardCheckPressed(Keys.Z))
+                    Undo();
+                if (Input.KeyboardCheckPressed(Keys.Y))
+                    Redo();
+            }
+
+            //save changes
+            if (Input.KeyboardCheckPressed(Keys.S) && Input.KeyboardCheckDown(Keys.LeftControl))
+                SaveModel();
+            else //toggle shading
             if (Input.KeyboardCheckPressed(Keys.S))
                 Drawing.EnableShading = !Drawing.EnableShading;
 
             //click on stuff
             if (Input.MouseCheckPressed(MouseButton.LeftButton))
-            {
-                //select colors ?
-                Vector2 mp = Input.MousePosition();
-                if (mp.Y < paletteSize && mp.X < paletteSize * colors.Length)
-                {
-                    selectedColor = (int)(mp.X / paletteSize);
-                    tool = "color";
-                }
-                else
-                {
-                    if (tool == "select")
-                    {
-                        bool selectedConstraint = false;
-                        int v = SelectVertex();
-                        if (showMoveTool && selectedVertices.Count > 0)
-                        {
-                            Vector3 constr = SelectMoveConstraint();
-                            if (constr != Vector3.Zero)
-                            {
-                                moveConstraint = constr;
-                                selectedConstraint = true;
-                            }
-                        }
-
-                        //selected a vertex
-                        if (v != -1 && !selectedConstraint)
-                        {
-                            if (!Input.KeyboardCheckDown(Keys.LeftShift))
-                                selectedVertices.Clear();
-
-                            if (selectedVertices.Contains(v))
-                                selectedVertices.Remove(v);
-                            else
-                                selectedVertices.Add(v);
-                        }
-                        else
-                        if (!selectedConstraint && !Input.KeyboardCheckDown(Keys.LeftShift))
-                            selectedVertices.Clear();
-                    }
-                    if (tool == "color")
-                    {
-                        int v = SelectVertex();
-                        v = SelectTriangle();
-                        if (v != -1)
-                        {
-                            if (myMesh.triangles[v].GetNormal(myMesh.vertices, World.Camera.ViewMatrix).Z < 0)
-                                myMesh.triangles[v].FrontFaceColor = colors[selectedColor];
-                            else
-                                myMesh.triangles[v].BackFaceColor = colors[selectedColor];
-                        }
-                        else
-                            tool = "select";
-                    }
-                }
-            }
+                HandleLeftClick();
+            if (Input.MouseCheckPressed(MouseButton.RightButton))
+                HandleRightClick();
 
             if (Input.MouseCheckReleased(MouseButton.LeftButton))
                 moveConstraint = Vector3.Zero;
@@ -148,24 +116,29 @@ namespace _3dEngine
 
             //make faces
             if (Input.KeyboardCheckPressed(Keys.F))
-            {
-                MakeFaces();
-            }
+                MakeFaces(selectedVertices, true);
 
             //remove vertices
-            if (Input.KeyboardCheckPressed(Keys.Delete))
+            if (Input.KeyboardCheckPressed(Keys.Delete) && selectedVertices.Count > 0)
             {
-                foreach (int i in selectedVertices)
-                    RemoveVertex(i);
+                AddHistoryEntry();
+                for (int i = 0; i < selectedVertices.Count; i++)
+                    RemoveVertex(selectedVertices[i]);
                 selectedVertices.Clear();
             }
+
+            //extrude
+            if (Input.KeyboardCheckPressed(Keys.E))
+                Extrude();
         }
 
         public override void Draw()
         {
-            base.Draw();
+            //base.Draw();
+            if (!wireframe)
+                myMesh.Draw(Drawing, World.Camera.ViewMatrix);
             if (drawDebug)
-                myMesh.DrawDebug(Drawing, Transform);
+                myMesh.DrawDebug(Drawing, World.Camera.ViewMatrix);
 
             Vector3 middle = Vector3.Zero;
             foreach (int i in selectedVertices)
@@ -175,7 +148,7 @@ namespace _3dEngine
             }
 
             //draw move around tool
-            if (showMoveTool && selectedVertices.Count > 0)
+            if (showMoveTool && selectedVertices.Count > 0 && tool == "select")
             {
                 middle /= selectedVertices.Count;
                 moveToolPosition = middle;
@@ -212,7 +185,8 @@ namespace _3dEngine
             if (tool == "color")
             {
                 Drawing.DrawPoint(new Vector3(mp, 2), 3, Color.Black, Matrix.GetIdentity());
-                Drawing.DrawPoint(new Vector3(mp, 1), 2, colors[selectedColor], Matrix.GetIdentity());
+                Drawing.DrawPoint(new Vector3(mp, 1) - Vector3.UnitX, 2, colors[selectedColorLeft], Matrix.GetIdentity());
+                Drawing.DrawPoint(new Vector3(mp, 1) + Vector3.UnitX, 2, colors[selectedColorRight], Matrix.GetIdentity());
             }
 
             //draw colors
@@ -222,6 +196,122 @@ namespace _3dEngine
                 if (color!= Color.Transparent)
                     Drawing.DrawPoint(new Vector3(paletteSize / 2 + paletteSize * c, 20, 2), paletteSize / 2, color, Matrix.GetIdentity());
             }
+
+            //draw models
+            float[,] matrix = Matrix.GetIdentity();
+            matrix = matrix.Translate(paletteSize / 2, paletteSize * 2, 200);
+            foreach (Mesh mesh in World.AllAssets.models.Values)
+            {
+                mesh.Draw(Drawing, matrix.Rotate(0, 135, 45));
+                matrix = matrix.Translate(paletteSize, 0, 0);
+            }
+        }
+
+        void Extrude()
+        {
+            int originalCount = myMesh.vertices.Count;
+            if (originalCount == 0)
+                return;
+            AddHistoryEntry();
+            for (int i = 0; i < selectedVertices.Count; i++)
+            AddVertex(myMesh.vertices[selectedVertices[i]]);
+            List<int> previousVerts = new List<int>(selectedVertices);
+            selectedVertices.Clear();
+            for (int i = originalCount; i < myMesh.vertices.Count; i++)
+                selectedVertices.Add(i);
+
+            //make faces if 2 of the previous verts are in the same one and only one triangle
+            List<Triangle> previousTriangles = new List<Triangle>(myMesh.triangles);
+            List<Point> edges = new List<Point>();
+            foreach (int i in previousVerts)
+            {
+                List<Triangle> connectedTriangles = new List<Triangle>();
+                foreach (Triangle tri in previousTriangles)
+                {
+                    if (tri.v0 == i || tri.v1 == i || tri.v2 == i)
+                        connectedTriangles.Add(tri);
+                }
+
+                foreach (int j in previousVerts)
+                {
+                    if (i == j)
+                        continue;
+                    int countSharedTriangles = 0;
+                    foreach (Triangle tri in connectedTriangles)
+                    {
+                        if (tri.v0 == j || tri.v1 == j || tri.v2 == j)
+                            countSharedTriangles++;
+                    }
+
+                    if (countSharedTriangles == 1)
+                    {
+                        bool duplicate = false;
+                        foreach (Point p in edges)
+                            if ((p.X == i && p.Y == j) || (p.Y == i && p.X == j))
+                                duplicate = true;
+                        if (!duplicate)
+                        {
+                            edges.Add(new Point(i, j));
+                            int otherJ = selectedVertices[previousVerts.FindIndex(x => x == j)];
+                            int otherI = selectedVertices[previousVerts.FindIndex(x => x == i)];
+                            MakeFaces(new List<int> { i, j, otherJ }, false);
+                            MakeFaces(new List<int> { i, otherJ, otherI }, false);
+                        }
+                    }
+                }
+            }
+            Console.WriteLine("edges: " + edges.Count);
+        }
+
+        void AddHistoryEntry()
+        {
+            if (historyIndex < history.Count)
+                history.RemoveRange(historyIndex, history.Count - historyIndex);
+
+            history.Add(myMesh.Copy());
+            historyIndex++;
+            Console.WriteLine(historyIndex + ", " + history.Count);
+        }
+
+        void Undo()
+        {
+            if (historyIndex > 0)
+            {
+                historyIndex--;
+                myMesh = history[historyIndex].Copy();
+            }
+            Console.WriteLine(historyIndex + ", " + history.Count);
+        }
+
+        void Redo()
+        {
+            if (historyIndex < history.Count -1)
+            {
+                historyIndex++;
+                myMesh = history[historyIndex].Copy();
+            }
+            Console.WriteLine(historyIndex + ", " + history.Count);
+        }
+
+        Mesh LoadCurrentModel()
+        {
+
+            if (World.AllAssets.models.ContainsKey(currentModel))
+                return World.AllAssets.models[currentModel];
+            else
+            {
+                Mesh mesh = new Mesh();
+                mesh.MakeCube(Color.LightGray, Color.Transparent);
+                return mesh;
+            }
+        }
+        void SaveModel()
+        {
+            if (World.AllAssets.models.ContainsKey(currentModel))
+                World.AllAssets.models[currentModel] = myMesh;
+            else
+            World.AllAssets.models.Add(currentModel, myMesh);
+            World.AllAssets.SaveAllModels();
         }
 
         int AddVertex(Vector3 position)
@@ -248,6 +338,90 @@ namespace _3dEngine
             }
             foreach (Triangle tri in removeTriangles)
                 myMesh.triangles.Remove(tri);
+
+            for (int i = 0; i < selectedVertices.Count; i++)
+                if (selectedVertices[i] > index)
+                    selectedVertices[i]--;
+        }
+
+        void HandleLeftClick()
+        {
+            //select colors ?
+            Vector2 mp = Input.MousePosition();
+            if (mp.Y < paletteSize && mp.X < paletteSize * colors.Length)
+            {
+                selectedColorLeft = (int)(mp.X / paletteSize);
+                tool = "color";
+            }
+            else
+            {
+                if (tool == "select")
+                {
+                    if (showMoveTool && selectedVertices.Count > 0)
+                    {
+                        Vector3 constr = SelectMoveConstraint();
+                        if (constr != Vector3.Zero)
+                        {
+                            moveConstraint = constr;
+                            AddHistoryEntry();
+                        }
+                    }
+                }
+                if (tool == "color")
+                {
+                    int v = SelectTriangle();
+                    if (v != -1)
+                    {
+                        AddHistoryEntry();
+                        if (myMesh.triangles[v].GetNormal(myMesh.vertices, World.Camera.ViewMatrix).Z < 0)
+                            myMesh.triangles[v].FrontFaceColor = colors[selectedColorLeft];
+                        else
+                            myMesh.triangles[v].BackFaceColor = colors[selectedColorLeft];
+                    }
+                }
+            }
+        }
+
+        void HandleRightClick()
+        {
+            //select colors ?
+            Vector2 mp = Input.MousePosition();
+            if (mp.Y < paletteSize && mp.X < paletteSize * colors.Length)
+            {
+                selectedColorRight = (int)(mp.X / paletteSize);
+                tool = "color";
+            }
+            else
+            if (tool == "select")
+            {
+                int v = SelectVertex();
+                //selected a vertex
+                if (v != -1)
+                {
+                    if (!Input.KeyboardCheckDown(Keys.LeftShift))
+                        selectedVertices.Clear();
+
+                    if (selectedVertices.Contains(v))
+                        selectedVertices.Remove(v);
+                    else
+                        selectedVertices.Add(v);
+                }
+                else
+                if (!Input.KeyboardCheckDown(Keys.LeftShift))
+                    selectedVertices.Clear();
+            }
+            if (tool == "color")
+            {
+                int v = SelectTriangle();
+                if (v != -1)
+                {
+                    AddHistoryEntry();
+                    if (myMesh.triangles[v].GetNormal(myMesh.vertices, World.Camera.ViewMatrix).Z < 0)
+                        myMesh.triangles[v].FrontFaceColor = colors[selectedColorRight];
+                    else
+                        myMesh.triangles[v].BackFaceColor = colors[selectedColorRight];
+                }
+            }
         }
 
         int SelectVertex()
@@ -338,21 +512,36 @@ namespace _3dEngine
             return (point.ToVector2() - Input.MousePosition()).Length() < radius && point.Z > Drawing.ZNear;
         }
 
-        void MakeFaces()
+        void MakeFaces(List<int>verts, bool removeDuplicate)
         {
-            if (selectedVertices.Count == 3)
+            if (verts.Count == 3)
             {
+                //check if verts in triangle are all unique
+                if (verts[0] == verts[1] || verts[1] == verts[2] || verts[2] == verts[0])
+                    return;
                 //check if triangle does not already exist. if so, remove that tri
                 foreach (Triangle tri in myMesh.triangles)
-                    if (selectedVertices.Contains(tri.v0) && selectedVertices.Contains(tri.v1) && selectedVertices.Contains(tri.v2))
+                    if (verts.Contains(tri.v0) && verts.Contains(tri.v1) && verts.Contains(tri.v2))
                     {
-                        myMesh.triangles.Remove(tri);
+                        if (removeDuplicate)
+                        {
+                            myMesh.triangles.Remove(tri);
+                            AddHistoryEntry();
+                        }
                         return;
                     }
-
-                myMesh.triangles.Add(new Triangle(selectedVertices[0], selectedVertices[1], selectedVertices[2], Color.Gray, Color.Gray));
+                MakeTriangle(verts[0], verts[1], verts[2]);
+                AddHistoryEntry();
             }
             Console.WriteLine(myMesh.triangles.Count);
+        }
+
+        Triangle MakeTriangle(int v0, int v1, int v2)
+        {
+            Triangle tri = new Triangle(v0, v1, v2, Color.Gray, Color.Gray);
+            myMesh.triangles.Add(tri);
+            AddHistoryEntry();
+            return tri;
         }
     }
 }

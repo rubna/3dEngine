@@ -26,7 +26,7 @@ namespace _3dEngine
         {
             float dZRot = 0;
             float dXYRot = 0;
-            if (Input.MouseCheckDown(MouseButton.RightButton))
+            if (Input.MouseCheckDown(MouseButton.MiddleButton))
             {
                 dXYRot += Input.MouseSpeed().X / 4;
                 dZRot += Input.MouseSpeed().Y / 4;
@@ -53,13 +53,13 @@ namespace _3dEngine
             //Drawing.DrawTriangle(Vector3.Zero, Vector3.UnitY * 100, Vector3.UnitZ * 100, Color.Blue, Color.Blue);
             //Drawing.DrawTriangle(Vector3.Zero, Vector3.UnitZ * 100, Vector3.UnitX * 100, Color.Green, Color.Green);
 
-            Drawing.DrawLine(Vector3.Zero, Vector3.UnitX * 1000, 3, Color.Red);
-            Drawing.DrawLine(Vector3.Zero, Vector3.UnitY * 1000, 3, Color.Green);
-            Drawing.DrawLine(Vector3.Zero, Vector3.UnitZ * 1000, 3, Color.Blue);
+            Drawing.DrawLine(Vector3.Zero, Vector3.UnitX * 1000, 2, Color.Red);
+            Drawing.DrawLine(Vector3.Zero, Vector3.UnitY * 1000, 2, Color.Green);
+            Drawing.DrawLine(Vector3.Zero, Vector3.UnitZ * 1000, 2, Color.Blue);
 
             Drawing.DrawPoint(Position, Color.Black, Matrix.Translate(Matrix.GetIdentity(), Drawing.ScreenSize.ToVector2().ToVector3() * 0.25f));
             Drawing.DrawPoint(Target, Color.Black, Matrix.Translate(Matrix.GetIdentity(), Drawing.ScreenSize.ToVector2().ToVector3() * 0.25f));
-
+            //World.AllAssets.GetModelWithName("sup").Draw(Drawing, ViewMatrix);
            // World.AllAssets.GetModelWithName("test").Draw(ViewMatrix, Drawing);
             //World.AllAssets.GetModelWithName("test").Draw(Matrix.GetIdentity(), Drawing);
         }

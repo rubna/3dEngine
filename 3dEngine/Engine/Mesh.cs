@@ -22,13 +22,13 @@ namespace _3dEngine
         {
             foreach (Triangle tri in triangles)
             {
-                Drawing.DrawLine(vertices[tri.v0], vertices[tri.v1], 3, Color.DarkGray);
-                Drawing.DrawLine(vertices[tri.v0], vertices[tri.v2], 3, Color.DarkGray);
-                Drawing.DrawLine(vertices[tri.v1], vertices[tri.v2], 3, Color.DarkGray);
+                Drawing.DrawLine(vertices[tri.v0], vertices[tri.v1], 2, Color.DarkGray, transform);
+                Drawing.DrawLine(vertices[tri.v0], vertices[tri.v2], 2, Color.DarkGray, transform);
+                Drawing.DrawLine(vertices[tri.v1], vertices[tri.v2], 2, Color.DarkGray, transform);
             }
             foreach (Vector3 p in vertices)
             {
-                Drawing.DrawPoint(p, 2, Color.Black);
+                Drawing.DrawPoint(p, 2, Color.Black, transform);
             }
         }
 
@@ -70,6 +70,16 @@ namespace _3dEngine
                 new Triangle(7, 2, 6, frontFaceColor, backFaceColor),*/
             };
             triangles.AddRange(tris);
+        }
+
+        public Mesh Copy()
+        {
+            Mesh myMesh = new Mesh();
+            for (int i = 0; i<vertices.Count; i++)
+                myMesh.vertices.Add(vertices[i]);
+            for (int i = 0; i < triangles.Count; i++)
+                myMesh.triangles.Add(triangles[i]);
+            return myMesh;
         }
     }
 }
